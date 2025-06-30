@@ -6,17 +6,18 @@ const contactItems = [
   {
     icon: <Mail className="w-6 h-6" />,
     title: 'Email Us',
-    content: 'hello@example.com',
+    content: 'sanjithrozario@gmail.com',
   },
   {
     icon: <Phone className="w-6 h-6" />,
     title: 'Call Us',
-    content: '+1 (555) 123-4567',
+    content: '+91 7305561830',
   },
   {
     icon: <MapPin className="w-6 h-6" />,
     title: 'Visit Us',
-    content: '123 Business Ave, Suite 100, CA 94107',
+    content:
+      '114 Ellai Amman Kovil Street, Nochi Nagar, Mylapore, Chennai-600004',
   },
 ];
 
@@ -26,12 +27,15 @@ export default function ContactSection() {
     <section className="bg-gray-50 py-16 px-4">
       <div className="max-w-6xl mx-auto">
         <div className="text-center mb-12">
-          <h2 className="text-3xl font-bold text-gray-800 mb-4">Get in Touch</h2>
+          <h2 className="text-3xl font-bold text-gray-800 mb-4">
+            Get in Touch
+          </h2>
           <p className="text-lg text-gray-600">
-            Have a question or want to work together? We'd love to hear from you.
+            Have a question or want to work together? We'd love to hear from
+            you.
           </p>
         </div>
-        
+
         <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-12">
           {contactItems.map((item, i) => (
             <div
@@ -48,7 +52,7 @@ export default function ContactSection() {
             </div>
           ))}
         </div>
-        
+
         <div className="text-center">
           <button
             onClick={() => setIsOpen(true)}
@@ -57,7 +61,7 @@ export default function ContactSection() {
             Send Message
           </button>
         </div>
-        
+
         {isOpen && (
           <div
             className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"

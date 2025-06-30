@@ -1,4 +1,8 @@
 {
-  "/api/create-razorpay-order/route": "app/api/create-razorpay-order/route.js",
-  "/(protected)/dashboard/page": "app/(protected)/dashboard/page.js"
+  "/(protected)/dashboard/page": "app/(protected)/dashboard/page.js",
+  "/(auth)/login/page": "app/(auth)/login/page.js",
+  "/page": "app/page.js",
+  "/(protected)/edit-profile/page": "app/(protected)/edit-profile/page.js",
+  "/(auth)/profile-setup/page": "app/(auth)/profile-setup/page.js",
+  "/(protected)/message/page": "app/(protected)/message/page.js"
 }

@@ -1,40 +1,110 @@
-"use client";
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+'use client';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { supabase } from '../../../lib/supabaseClient';
 
 export default function ProfileSetupPage() {
   const router = useRouter();
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
-  const [city, setCity] = useState("");
-  const [pincode, setPincode] = useState("");
-  const [about, setAbout] = useState("");
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [city, setCity] = useState('');
+  const [pincode, setPincode] = useState('');
+  const [about, setAbout] = useState('');
   const [profilePicture, setProfilePicture] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState('');
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [phoneError, setPhoneError] = useState("");
+  const [phoneError, setPhoneError] = useState('');
   const [otpSent, setOtpSent] = useState(false);
-  const [otp, setOtp] = useState("");
-  const [otpError, setOtpError] = useState("");
+  const [otp, setOtp] = useState('');
+  const [otpError, setOtpError] = useState('');
   const [phoneVerified, setPhoneVerified] = useState(false);
-
+  const [loginMethod, setLoginMethod] = useState<'email' | 'phone'>('email');
+  const [validatingLocation, setValidatingLocation] = useState(false);
+  const [locationError, setLocationError] = useState('');
   // Get current user
   async function getUser() {
-    const { data: { user } } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
     return user;
   }
+
+  const validateLocation = async (pincode: string, city: string) => {
+    if (!pincode || !city) return true; // Skip if either field is empty
+
+    setValidatingLocation(true);
+    try {
+      const response = await fetch(
+        `https://api.postalpincode.in/pincode/${pincode}`,
+      );
+      if (!response.ok) {
+        throw new Error('Failed to validate pincode');
+      }
+
+      const data = await response.json();
+
+      // Check if API returned success
+      if (data[0]?.Status !== 'Success') {
+        setLocationError('Invalid pincode');
+        return false;
+      }
+
+      const isValidCity = data[0]?.PostOffice?.some(
+        (office: any) =>
+          office.District.toLowerCase() === city.toLowerCase() ||
+          office.Name.toLowerCase() === city.toLowerCase() ||
+          office.Block.toLowerCase() === city.toLowerCase(),
+      );
+
+      if (!isValidCity) {
+        setLocationError('City does not match the pincode district');
+        return false;
+      }
+
+      setLocationError('');
+      return true;
+    } catch (error) {
+      setLocationError('Invalid pincode or unable to verify location');
+      return false;
+    } finally {
+      setValidatingLocation(false);
+    }
+  };
+
+  useEffect(() => {
+    async function fetchUser() {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user) {
+        // Determine login method
+        if (user.phone) {
+          setLoginMethod('phone');
+          setPhone(user.phone.replace('+91', ''));
+          setPhoneVerified(true); // Already verified if logged in with phone
+        } else {
+          setLoginMethod('email');
+          setEmail(user.email || '');
+        }
+      }
+    }
+    fetchUser();
+  }, []);
 
   // Handle image upload to Supabase Storage
   async function uploadImage(file: File, userId: string) {
     const fileExt = file.name.split('.').pop();
     const filePath = `${userId}.${fileExt}`;
-    const { error } = await supabase.storage.from('profile-pictures').upload(filePath, file, { upsert: true });
+    const { error } = await supabase.storage
+      .from('profile-pictures')
+      .upload(filePath, file, { upsert: true });
     if (error) throw error;
     // Get public URL
-    const { data } = supabase.storage.from('profile-pictures').getPublicUrl(filePath);
+    const { data } = supabase.storage
+      .from('profile-pictures')
+      .getPublicUrl(filePath);
     return data.publicUrl;
   }
 
@@ -42,7 +112,7 @@ export default function ProfileSetupPage() {
   const validatePhone = async (value: string) => {
     // Check for 10 digits
     if (!/^\d{10}$/.test(value)) {
-      setPhoneError("Phone number must be 10 digits");
+      setPhoneError('Phone number must be 10 digits');
       return false;
     }
     // Check uniqueness in profiles table
@@ -52,29 +122,31 @@ export default function ProfileSetupPage() {
       .eq('phone', value)
       .single();
     if (data) {
-      setPhoneError("This phone number is already in use");
+      setPhoneError('This phone number is already in use');
       return false;
     }
-    setPhoneError("");
+    setPhoneError('');
     return true;
   };
 
   // Send OTP using Supabase
   const handleSendOtp = async () => {
-    setPhoneError("");
-    setOtpError("");
+    setPhoneError('');
+    setOtpError('');
     if (!/^\d{10}$/.test(phone)) {
-      setPhoneError("Phone number must be 10 digits");
+      setPhoneError('Phone number must be 10 digits');
       return;
     }
     try {
-      const { error } = await supabase.auth.signInWithOtp({ phone: "+91" + phone });
+      const { error } = await supabase.auth.signInWithOtp({
+        phone: '+91' + phone,
+      });
       if (error) {
         setPhoneError(error.message);
         return;
       }
       setOtpSent(true);
-      setMessage("OTP sent to your phone number");
+      setMessage('OTP sent to your phone number');
     } catch (err: any) {
       setPhoneError(err.message);
     }
@@ -82,15 +154,19 @@ export default function ProfileSetupPage() {
 
   // Verify OTP using Supabase
   const handleVerifyOtp = async () => {
-    setOtpError("");
+    setOtpError('');
     try {
-      const { error } = await supabase.auth.verifyOtp({ phone: "+91" + phone, token: otp, type: "sms" });
+      const { error } = await supabase.auth.verifyOtp({
+        phone: '+91' + phone,
+        token: otp,
+        type: 'sms',
+      });
       if (error) {
         setOtpError(error.message);
         return;
       }
       setPhoneVerified(true);
-      setMessage("Phone number verified!");
+      setMessage('Phone number verified!');
     } catch (err: any) {
       setOtpError(err.message);
     }
@@ -100,11 +176,11 @@ export default function ProfileSetupPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    setMessage("");
+    setMessage('');
     try {
       if (!phoneVerified) {
         setLoading(false);
-        setPhoneError("Please verify your phone number with OTP");
+        setPhoneError('Please verify your phone number with OTP');
         return;
       }
       if (!(await validatePhone(phone))) {
@@ -112,7 +188,7 @@ export default function ProfileSetupPage() {
         return;
       }
       const user = await getUser();
-      if (!user) throw new Error("Not logged in");
+      if (!user) throw new Error('Not logged in');
       let imageUrl = null;
       if (profilePicture) {
         imageUrl = await uploadImage(profilePicture, user.id);
@@ -129,7 +205,7 @@ export default function ProfileSetupPage() {
         profile_picture: imageUrl,
       });
       if (error) throw error;
-      setMessage("Profile saved!");
+      setMessage('Profile saved!');
       router.push('/dashboard');
     } catch (err: any) {
       setMessage(err.message);
@@ -150,34 +226,51 @@ export default function ProfileSetupPage() {
     }
   };
 
-  if (loading) return (
-    <div className="flex items-center justify-center h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-        <p className="text-gray-600 font-medium">Loading profile...</p>
+  if (loading)
+    return (
+      <div className="flex items-center justify-center h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600 font-medium">Loading profile...</p>
+        </div>
       </div>
-    </div>
-  );
+    );
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 py-8">
       <div className="max-w-2xl mx-auto p-6 bg-white rounded-2xl shadow-2xl border border-gray-100">
         <div className="text-center mb-8">
           <div className="w-20 h-20 bg-gradient-to-r from-blue-500 to-purple-600 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg className="w-10 h-10 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+            <svg
+              className="w-10 h-10 text-white"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+              />
             </svg>
           </div>
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">Complete Your Profile</h1>
-          <p className="text-gray-600">Tell us a bit about yourself to get started</p>
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">
+            Complete Your Profile
+          </h1>
+          <p className="text-gray-600">
+            Tell us a bit about yourself to get started
+          </p>
         </div>
 
         {message && (
-          <div className={`mb-6 p-4 rounded-lg text-sm ${
-            message.includes('error') || message.includes('failed') 
-              ? 'bg-red-50 text-red-700 border border-red-200' 
-              : 'bg-green-50 text-green-700 border border-green-200'
-          }`}>
+          <div
+            className={`mb-6 p-4 rounded-lg text-sm ${
+              message.includes('error') || message.includes('failed')
+                ? 'bg-red-50 text-red-700 border border-red-200'
+                : 'bg-green-50 text-green-700 border border-green-200'
+            }`}
+          >
             {message}
           </div>
         )}
@@ -186,8 +279,18 @@ export default function ProfileSetupPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-2">
               <label className="block text-sm font-medium text-gray-700 flex items-center">
-                <svg className="w-4 h-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                <svg
+                  className="w-4 h-4 mr-2 text-gray-500"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                  />
                 </svg>
                 Full Name
               </label>
@@ -195,7 +298,7 @@ export default function ProfileSetupPage() {
                 type="text"
                 placeholder="Enter your full name"
                 value={fullName}
-                onChange={e => setFullName(e.target.value)}
+                onChange={(e) => setFullName(e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                 required
               />
@@ -203,8 +306,18 @@ export default function ProfileSetupPage() {
 
             <div className="space-y-2">
               <label className="block text-sm font-medium text-gray-700 flex items-center">
-                <svg className="w-4 h-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207" />
+                <svg
+                  className="w-4 h-4 mr-2 text-gray-500"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M16 12a4 4 0 10-8 0 4 4 0 008 0zm0 0v1.5a2.5 2.5 0 005 0V12a9 9 0 10-9 9m4.5-1.206a8.959 8.959 0 01-4.5 1.207"
+                  />
                 </svg>
                 Email
               </label>
@@ -212,7 +325,7 @@ export default function ProfileSetupPage() {
                 type="email"
                 placeholder="Enter your email"
                 value={email}
-                onChange={e => setEmail(e.target.value)}
+                onChange={(e) => setEmail(e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                 required
               />
@@ -220,8 +333,18 @@ export default function ProfileSetupPage() {
 
             <div className="space-y-2">
               <label className="block text-sm font-medium text-gray-700 flex items-center">
-                <svg className="w-4 h-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                <svg
+                  className="w-4 h-4 mr-2 text-gray-500"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
+                  />
                 </svg>
                 Phone Number
               </label>
@@ -230,15 +353,15 @@ export default function ProfileSetupPage() {
                   type="tel"
                   placeholder="Enter your phone number"
                   value={phone}
-                  onChange={async e => {
+                  onChange={async (e) => {
                     setPhone(e.target.value);
                     setPhoneVerified(false);
                     setOtpSent(false);
-                    setOtp("");
+                    setOtp('');
                     if (e.target.value.length === 10) {
                       await validatePhone(e.target.value);
                     } else {
-                      setPhoneError("");
+                      setPhoneError('');
                     }
                   }}
                   className={`w-full px-4 py-3 border ${phoneError ? 'border-red-500' : 'border-gray-300'} rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all`}
@@ -255,14 +378,16 @@ export default function ProfileSetupPage() {
                   </button>
                 )}
               </div>
-              {phoneError && <p className="text-red-500 text-xs mt-1">{phoneError}</p>}
+              {phoneError && (
+                <p className="text-red-500 text-xs mt-1">{phoneError}</p>
+              )}
               {otpSent && !phoneVerified && (
                 <div className="mt-2 flex gap-2 items-center">
                   <input
                     type="text"
                     placeholder="Enter OTP"
                     value={otp}
-                    onChange={e => setOtp(e.target.value)}
+                    onChange={(e) => setOtp(e.target.value)}
                     className="w-32 px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500"
                     maxLength={6}
                   />
@@ -273,17 +398,40 @@ export default function ProfileSetupPage() {
                   >
                     Verify OTP
                   </button>
-                  {otpError && <span className="text-red-500 text-xs ml-2">{otpError}</span>}
+                  {otpError && (
+                    <span className="text-red-500 text-xs ml-2">
+                      {otpError}
+                    </span>
+                  )}
                 </div>
               )}
-              {phoneVerified && <p className="text-green-600 text-xs mt-1">Phone number verified!</p>}
+              {phoneVerified && (
+                <p className="text-green-600 text-xs mt-1">
+                  Phone number verified!
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
               <label className="block text-sm font-medium text-gray-700 flex items-center">
-                <svg className="w-4 h-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                <svg
+                  className="w-4 h-4 mr-2 text-gray-500"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                  />
                 </svg>
                 City
               </label>
@@ -291,7 +439,7 @@ export default function ProfileSetupPage() {
                 type="text"
                 placeholder="Enter your city"
                 value={city}
-                onChange={e => setCity(e.target.value)}
+                onChange={(e) => setCity(e.target.value)}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                 required
               />
@@ -299,9 +447,24 @@ export default function ProfileSetupPage() {
 
             <div className="space-y-2">
               <label className="block text-sm font-medium text-gray-700 flex items-center">
-                <svg className="w-4 h-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                <svg
+                  className="w-4 h-4 mr-2 text-gray-500"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                  />
                 </svg>
                 Pincode
               </label>
@@ -309,7 +472,16 @@ export default function ProfileSetupPage() {
                 type="text"
                 placeholder="Enter your pincode"
                 value={pincode}
-                onChange={e => setPincode(e.target.value)}
+                onChange={(e) => {
+                  // Only allow numbers and limit to 6 digits
+                  const value = e.target.value.replace(/\D/g, '').slice(0, 6);
+                  setPincode(value);
+                  setLocationError('');
+                  // Auto-validate when 6 digits are entered
+                  if (value.length === 6 && city) {
+                    validateLocation(value, city);
+                  }
+                }}
                 className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
                 required
               />
@@ -318,15 +490,25 @@ export default function ProfileSetupPage() {
 
           <div className="space-y-2">
             <label className="block text-sm font-medium text-gray-700 flex items-center">
-              <svg className="w-4 h-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              <svg
+                className="w-4 h-4 mr-2 text-gray-500"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
               </svg>
               About You
             </label>
             <textarea
               placeholder="Tell us about yourself, your experience, and what services you offer..."
               value={about}
-              onChange={e => setAbout(e.target.value)}
+              onChange={(e) => setAbout(e.target.value)}
               rows={4}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all resize-none"
               required
@@ -335,14 +517,28 @@ export default function ProfileSetupPage() {
 
           <div className="space-y-2">
             <label className="block text-sm font-medium text-gray-700 flex items-center">
-              <svg className="w-4 h-4 mr-2 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              <svg
+                className="w-4 h-4 mr-2 text-gray-500"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"
+                />
               </svg>
               Profile Picture
             </label>
             <div className="flex items-center space-x-4">
               {previewUrl && (
-                <img src={previewUrl} alt="Preview" className="w-20 h-20 rounded-full object-cover border-2 border-gray-200" />
+                <img
+                  src={previewUrl}
+                  alt="Preview"
+                  className="w-20 h-20 rounded-full object-cover border-2 border-gray-200"
+                />
               )}
               <div className="flex-1">
                 <input
@@ -376,10 +572,10 @@ export default function ProfileSetupPage() {
           disabled={loading}
           onClick={async () => {
             setLoading(true);
-            setMessage("");
+            setMessage('');
             try {
               const user = await getUser();
-              if (!user) throw new Error("Not logged in");
+              if (!user) throw new Error('Not logged in');
               // Upsert minimal profile with skipped flag
               const { error } = await supabase.from('profiles').upsert({
                 id: user.id,
